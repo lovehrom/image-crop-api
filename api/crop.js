@@ -30,23 +30,16 @@ module.exports = async function handler(req, res) {
       });
     });
 
-    // Handle both cases: file in req.file or in req.body.file
+    // Handle both scenarios
     let imageBuffer;
 
-    if (req.file) {
-      // Case 1: Binary file in req.file
+    // Scenario 1: Normal clients - file in req.file (binary)
+    if (req.file && req.file.buffer && req.file.buffer.length > 0) {
       imageBuffer = req.file.buffer;
-    } else if (req.body.file) {
-      // Case 2: File as string in req.body.file
-      const fileData = req.body.file;
-
-      // Try base64 first
-      if (typeof fileData === 'string' && fileData.match(/^[A-Za-z0-9+/]+=*$/)) {
-        imageBuffer = Buffer.from(fileData, 'base64');
-      } else {
-        // Try latin1 (binary-like)
-        imageBuffer = Buffer.from(fileData, 'latin1');
-      }
+    }
+    // Scenario 2: RapidAPI Playground - file in req.body.file (string)
+    else if (req.body.file && typeof req.body.file === 'string') {
+      imageBuffer = Buffer.from(req.body.file, 'latin1');
     } else {
       return res.status(400).json({ error: 'File is required' });
     }
@@ -61,6 +54,11 @@ module.exports = async function handler(req, res) {
     const angle = parseInt(req.body.angle);
     const radius = parseInt(req.body.radius);
     const format = req.body.format || 'png';
+
+    // Validate crop parameters
+    if (!cropWidth || !cropHeight) {
+      return res.status(400).json({ error: 'cropWidth and cropHeight are required' });
+    }
 
     let image = sharp(imageBuffer);
 
