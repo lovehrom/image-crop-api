@@ -1,6 +1,6 @@
 {
   "name": "image-crop-api",
-  "version": 2.0.0,
+  "version": 2,
   "builds": [
     {
       "src": "package.json",
@@ -9,11 +9,8 @@
   ],
   "routes": [
     {
-      "src": "src/server.js",
-      "use": "@vercel/node"
+      "src": "/(.*)",
+      "dest": "/src/server.js"
     }
-  ],
-  "env": {
-    "PORT": "3000"
-  }
+  ]
 }
