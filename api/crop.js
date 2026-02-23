@@ -32,44 +32,26 @@ module.exports = async function handler(req, res) {
 
     // Handle both cases: file in req.file or in req.body.file
     let imageBuffer;
-    const debug = {
-      reqFileExists: !!req.file,
-      reqBodyFileExists: !!req.body?.file,
-      reqBodyFileType: req.body?.file ? typeof req.body.file : null,
-      reqBodyKeys: Object.keys(req.body || {})
-    };
 
     if (req.file) {
       // Case 1: Binary file in req.file
-      debug.fileSource = 'req.file.buffer';
       imageBuffer = req.file.buffer;
     } else if (req.body.file) {
       // Case 2: File as string in req.body.file
       const fileData = req.body.file;
-      debug.fileSource = 'req.body.file';
-      debug.fileDataType = typeof fileData;
-      debug.fileDataLength = fileData.length;
-      debug.fileDataStart = fileData.substring(0, 100);
 
       // Try base64 first
       if (typeof fileData === 'string' && fileData.match(/^[A-Za-z0-9+/]+=*$/)) {
-        debug.decodingMethod = 'base64';
         imageBuffer = Buffer.from(fileData, 'base64');
       } else {
         // Try latin1 (binary-like)
-        debug.decodingMethod = 'latin1';
         imageBuffer = Buffer.from(fileData, 'latin1');
       }
-
-      debug.decodedBufferLength = imageBuffer.length;
     } else {
-      return res.status(400).json({
-        error: 'File is required',
-        debug
-      });
+      return res.status(400).json({ error: 'File is required' });
     }
 
-    // Parse and validate parameters
+    // Parse parameters
     const cropWidth = parseInt(req.body.cropWidth);
     const cropHeight = parseInt(req.body.cropHeight);
     const x = parseInt(req.body.x);
@@ -79,24 +61,6 @@ module.exports = async function handler(req, res) {
     const angle = parseInt(req.body.angle);
     const radius = parseInt(req.body.radius);
     const format = req.body.format || 'png';
-
-    debug.parsedParams = {
-      cropWidth, cropHeight, x, y, width, height, angle, radius, format
-    };
-
-    // Validate crop parameters
-    if (!cropWidth || !cropHeight || !x || !y) {
-      console.log('Skipping crop - missing params');
-    }
-
-    // Validate resize parameters
-    if (!width || !height) {
-      console.log('Skipping resize - missing params');
-    }
-
-    // Debug before Sharp
-    console.log('Buffer length:', imageBuffer.length);
-    console.log('Buffer first bytes:', imageBuffer.slice(0, 4).toString('hex'));
 
     let image = sharp(imageBuffer);
 
@@ -159,8 +123,7 @@ module.exports = async function handler(req, res) {
     console.error('Image processing error:', error);
     res.status(500).json({
       error: 'Internal server error',
-      message: error.message,
-      stack: error.stack
+      message: error.message
     });
   }
 };
