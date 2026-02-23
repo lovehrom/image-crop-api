@@ -14,6 +14,7 @@ module.exports = async function handler(req, res) {
     let imageBuffer;
     let fields = {};
     let files = {};
+    const debug = {};
 
     if (contentType.includes('multipart/form-data')) {
       // Parse multipart/form-data with formidable
@@ -33,38 +34,41 @@ module.exports = async function handler(req, res) {
         });
       });
 
-      console.log('Multipart fields:', JSON.stringify(Object.keys(fields), null, 2));
-      console.log('Multipart files:', JSON.stringify(Object.keys(files), null, 2));
+      debug.contentType = 'multipart/form-data';
+      debug.fieldsKeys = Object.keys(fields);
+      debug.filesKeys = Object.keys(files);
 
       // Check if file is in files object
       if (files.file) {
-        console.log('File in files object, reading from disk:', files.file.filepath);
+        debug.fileSource = 'files.file (disk)';
+        debug.filepath = files.file.filepath;
         imageBuffer = fs.readFileSync(files.file.filepath);
       } else if (fields.file) {
-        console.log('File in fields, type:', typeof fields.file);
-        console.log('File is string?', typeof fields.file === 'string');
-        console.log('File has value?', fields.file !== undefined && fields.file !== null);
+        debug.fileSource = 'fields.file';
+        debug.fileType = typeof fields.file;
         
         // Check if file is a string (FormData might send it as base64)
         if (typeof fields.file === 'string') {
-          console.log('File starts with:', fields.file.substring(0, Math.min(50, fields.file.length)));
+          debug.fileStringStart = fields.file.substring(0, Math.min(100, fields.file.length));
           const base64Data = fields.file.replace(/^data:image\/\w+;base64,/, '');
           imageBuffer = Buffer.from(base64Data, 'base64');
+          debug.base64Length = base64Data.length;
+          debug.bufferLength = imageBuffer.length;
         } else if (Array.isArray(fields.file)) {
-          console.log('File is array, first element type:', typeof fields.file[0]);
+          debug.fileArrayType = typeof fields.file[0];
           if (typeof fields.file[0] === 'string') {
             const base64Data = fields.file[0].replace(/^data:image\/\w+;base64,/, '');
             imageBuffer = Buffer.from(base64Data, 'base64');
+            debug.bufferLength = imageBuffer.length;
           } else {
-            return res.status(400).json({ error: 'Invalid file format' });
+            return res.status(400).json({ error: 'Invalid file format', debug });
           }
         } else {
-          console.log('File object:', JSON.stringify(fields.file, null, 2));
-          return res.status(400).json({ error: 'File is not a string or array' });
+          debug.fileStructure = JSON.stringify(fields.file, null, 2);
+          return res.status(400).json({ error: 'File is not a string or array', debug });
         }
-        console.log('Buffer length:', imageBuffer.length);
       } else {
-        return res.status(400).json({ error: 'File is required' });
+        return res.status(400).json({ error: 'File is required', debug });
       }
 
     } else if (contentType.includes('application/json')) {
@@ -74,91 +78,106 @@ module.exports = async function handler(req, res) {
         body += chunk.toString();
       }
       fields = JSON.parse(body);
-      console.log('JSON fields:', Object.keys(fields));
+      
+      debug.contentType = 'application/json';
+      debug.fieldsKeys = Object.keys(fields);
 
       if (fields.file) {
-        console.log('File in JSON, type:', typeof fields.file);
+        debug.fileType = typeof fields.file;
         
         if (typeof fields.file === 'string') {
+          debug.fileStringStart = fields.file.substring(0, Math.min(100, fields.file.length));
           const base64Data = fields.file.replace(/^data:image\/\w+;base64,/, '');
           imageBuffer = Buffer.from(base64Data, 'base64');
+          debug.base64Length = base64Data.length;
+          debug.bufferLength = imageBuffer.length;
         } else {
-          return res.status(400).json({ error: 'File must be a base64 string' });
+          return res.status(400).json({ error: 'File must be a base64 string', debug });
         }
-        console.log('Buffer length:', imageBuffer.length);
       } else {
-        return res.status(400).json({ error: 'File is required' });
+        return res.status(400).json({ error: 'File is required', debug });
       }
     } else {
-      return res.status(400).json({ error: 'Unsupported content type' });
+      debug.contentType = contentType;
+      return res.status(400).json({ error: 'Unsupported content type', debug });
     }
 
-    console.log('Image buffer length:', imageBuffer.length);
-    console.log('Buffer first 20 bytes:', imageBuffer.slice(0, 20).toString('hex'));
+    debug.bufferLength = imageBuffer?.length || 0;
+    debug.bufferHexStart = imageBuffer?.slice(0, 32).toString('hex') || '';
 
     // Validate image format
     if (!imageBuffer || imageBuffer.length === 0) {
-      return res.status(400).json({ error: 'Empty image buffer' });
+      return res.status(400).json({ error: 'Empty image buffer', debug });
     }
 
-    let image = sharp(imageBuffer);
+    // Try to create sharp instance with detailed error info
+    try {
+      let image = sharp(imageBuffer);
+      debug.sharpSuccess = true;
 
-    // Обрезка (crop)
-    if (fields.cropWidth && fields.cropHeight && fields.x && fields.y) {
-      image = image.extract({
-        left: parseInt(fields.cropWidth),
-        top: parseInt(fields.cropHeight),
-        width: parseInt(fields.x),
-        height: parseInt(fields.y)
-      });
+      // Обрезка (crop)
+      if (fields.cropWidth && fields.cropHeight && fields.x && fields.y) {
+        image = image.extract({
+          left: parseInt(fields.cropWidth),
+          top: parseInt(fields.cropHeight),
+          width: parseInt(fields.x),
+          height: parseInt(fields.y)
+        });
+      }
+
+      // Изменение размера (resize)
+      if (fields.width && fields.height) {
+        image = image.resize(parseInt(fields.width), parseInt(fields.height));
+      }
+
+      // Поворот (rotate)
+      if (fields.angle) {
+        image = image.rotate(parseInt(fields.angle));
+      }
+
+      // Скругление углов (rounded corners)
+      if (fields.radius && parseInt(fields.radius) > 0) {
+        const radius = parseInt(fields.radius);
+        const metadata = await image.metadata();
+        const width = metadata.width;
+        const height = metadata.height;
+
+        const roundedCorners = Buffer.from(
+          `<svg><rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
+        );
+
+        const roundedCornersMask = await sharp(roundedCorners)
+          .resize(width, height)
+          .grayscale()
+          .toBuffer();
+
+        image = image.composite([
+          { input: roundedCornersMask, blend: 'in' }
+        ]);
+      }
+
+      // Конвертация в формат
+      const format = fields.format || 'png';
+      let processedImage;
+
+      if (format === 'png') {
+        processedImage = await image.png().toBuffer();
+      } else if (format === 'jpeg') {
+        processedImage = await image.jpeg({ quality: 80 }).toBuffer();
+      } else if (format === 'webp') {
+        processedImage = await image.webp({ quality: 80 }).toBuffer();
+      }
+
+      // Отправка результата
+      res.setHeader('Content-Type', `image/${format}`);
+      res.send(processedImage);
+
+    } catch (sharpError) {
+      debug.sharpSuccess = false;
+      debug.sharpError = sharpError.message;
+      debug.sharpStack = sharpError.stack;
+      throw sharpError;
     }
-
-    // Изменение размера (resize)
-    if (fields.width && fields.height) {
-      image = image.resize(parseInt(fields.width), parseInt(fields.height));
-    }
-
-    // Поворот (rotate)
-    if (fields.angle) {
-      image = image.rotate(parseInt(fields.angle));
-    }
-
-    // Скругление углов (rounded corners)
-    if (fields.radius && parseInt(fields.radius) > 0) {
-      const radius = parseInt(fields.radius);
-      const metadata = await image.metadata();
-      const width = metadata.width;
-      const height = metadata.height;
-
-      const roundedCorners = Buffer.from(
-        `<svg><rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
-      );
-
-      const roundedCornersMask = await sharp(roundedCorners)
-        .resize(width, height)
-        .grayscale()
-        .toBuffer();
-
-      image = image.composite([
-        { input: roundedCornersMask, blend: 'in' }
-      ]);
-    }
-
-    // Конвертация в формат
-    const format = fields.format || 'png';
-    let processedImage;
-
-    if (format === 'png') {
-      processedImage = await image.png().toBuffer();
-    } else if (format === 'jpeg') {
-      processedImage = await image.jpeg({ quality: 80 }).toBuffer();
-    } else if (format === 'webp') {
-      processedImage = await image.webp({ quality: 80 }).toBuffer();
-    }
-
-    // Отправка результата
-    res.setHeader('Content-Type', `image/${format}`);
-    res.send(processedImage);
 
   } catch (error) {
     console.error('Image processing error:', error);
