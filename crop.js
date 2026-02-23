@@ -1,25 +1,37 @@
 const sharp = require('sharp');
 const formidable = require('formidable');
+const fs = require('fs');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Configure formidable for Vercel Serverless Functions
-  const form = formidable({
-    maxFileSize: 5 * 1024 * 1024, // 5MB
-    maxTotalFileSize: 5 * 1024 * 1024,
-    keepExtensions: false,
-    multiples: false
-  });
-
   try {
-    // Parse incoming request with Promise wrapper
+    // Configure formidable to use memory storage
+    const form = formidable({
+      maxFileSize: 5 * 1024 * 1024, // 5MB
+      maxTotalFileSize: 5 * 1024 * 1024,
+      fileWriteStreamHandler: (file) => {
+        // Store chunks in memory
+        const chunks = [];
+        file.on('data', (chunk) => chunks.push(chunk));
+        file.on('end', () => {
+          file.buffer = Buffer.concat(chunks);
+        });
+        return file;
+      }
+    });
+
+    // Parse form with Promise wrapper
     const [fields, files] = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve([fields, files]);
+        if (err) {
+          console.error('Form parse error:', err);
+          reject(err);
+        } else {
+          resolve([fields, files]);
+        }
       });
     });
 
@@ -27,9 +39,15 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'File is required' });
     }
 
-    // Read file content
-    const fs = require('fs');
-    const imageBuffer = fs.readFileSync(files.file.filepath);
+    // Get image buffer from memory
+    let imageBuffer;
+    if (files.file.buffer) {
+      imageBuffer = files.file.buffer;
+    } else if (files.file.filepath && fs.existsSync(files.file.filepath)) {
+      imageBuffer = fs.readFileSync(files.file.filepath);
+    } else {
+      return res.status(500).json({ error: 'Failed to read file' });
+    }
 
     let image = sharp(imageBuffer);
 
@@ -94,7 +112,8 @@ module.exports = async function handler(req, res) {
     console.error('Image processing error:', error);
     res.status(500).json({
       error: 'Internal server error',
-      message: error.message
+      message: error.message,
+      stack: error.stack
     });
   }
 };
