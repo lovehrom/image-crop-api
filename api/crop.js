@@ -1,86 +1,46 @@
-const sharp = require('sharp');
-const formidable = require('formidable');
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const form = formidable({
-    maxFileSize: 5 * 1024 * 1024, // 5MB
-    maxTotalFileSize: 5 * 1024 * 1024
-  });
-
+module.exports = async function handler(req, res) {
   try {
-    const [fields, files] = await form.parse(req);
+    console.log('Method:', req.method);
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Body type:', req.body ? typeof req.body : 'undefined');
 
-    if (!files.file || files.file.length === 0) {
-      return res.status(400).json({ error: 'File is required' });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const file = files.file[0];
-    let image = sharp(file.filepath);
+    // Для multipart/form-data в Vercel Serverless Functions
+    // req.body может содержать распарсенные данные если они были обработаны
 
-    // Обрезка (crop)
-    if (fields.cropWidth && fields.cropHeight && fields.x && fields.y) {
-      image = image.extract({
-        left: parseInt(fields.x[0]),
-        top: parseInt(fields.y[0]),
-        width: parseInt(fields.cropWidth[0]),
-        height: parseInt(fields.cropHeight[0])
+    // Если файл загружен, он может быть в разных местах в зависимости от конфигурации
+    if (req.body && req.body.file) {
+      return res.status(200).json({
+        message: 'File received via req.body.file',
+        body: Object.keys(req.body)
       });
     }
 
-    // Изменение размера (resize)
-    if (fields.width && fields.height) {
-      image = image.resize(parseInt(fields.width[0]), parseInt(fields.height[0]));
+    // Если файл в req.files (некоторые конфигурации Vercel)
+    if (req.files && req.files.file) {
+      return res.status(200).json({
+        message: 'File received via req.files.file',
+        files: Object.keys(req.files)
+      });
     }
 
-    // Поворот (rotate)
-    if (fields.angle) {
-      image = image.rotate(parseInt(fields.angle[0]));
-    }
-
-    // Скругление углов (rounded corners)
-    if (fields.radius && fields.radius[0] > 0) {
-      const radius = parseInt(fields.radius[0]);
-      const metadata = await image.metadata();
-      const width = metadata.width;
-      const height = metadata.height;
-
-      // Создаем маску для скругления
-      const roundedCorners = Buffer.from(
-        `<svg><rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
-      );
-
-      const roundedCornersMask = await sharp(roundedCorners)
-        .resize(width, height)
-        .grayscale()
-        .toBuffer();
-
-      image = image.composite([
-        { input: roundedCornersMask, blend: 'in' }
-      ]);
-    }
-
-    // Конвертация в формат
-    const format = fields.format ? fields.format[0] : 'png';
-    let processedImage;
-
-    if (format === 'png') {
-      processedImage = await image.png().toBuffer();
-    } else if (format === 'jpeg') {
-      processedImage = await image.jpeg({ quality: 80 }).toBuffer();
-    } else if (format === 'webp') {
-      processedImage = await image.webp({ quality: 80 }).toBuffer();
-    }
-
-    // Отправка результата
-    res.setHeader('Content-Type', `image/${format}`);
-    res.send(processedImage);
+    // Если ничего не нашли
+    return res.status(200).json({
+      message: 'POST request received, but no file found',
+      method: req.method,
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      contentType: req.headers['content-type']
+    });
 
   } catch (error) {
-    console.error('Image processing error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error:', error);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack
+    });
   }
-}
+};
