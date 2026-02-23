@@ -13,6 +13,7 @@ module.exports = async function handler(req, res) {
 
     let imageBuffer;
     let fields = {};
+    let files = {};
 
     if (contentType.includes('multipart/form-data')) {
       // Parse multipart/form-data with formidable
@@ -32,15 +33,22 @@ module.exports = async function handler(req, res) {
         });
       });
 
+      console.log('Multipart fields:', JSON.stringify(Object.keys(fields), null, 2));
+      console.log('Multipart files:', JSON.stringify(Object.keys(files), null, 2));
+
       // Check if file is in files object
       if (files.file) {
+        console.log('File in files object, reading from disk:', files.file.filepath);
         imageBuffer = fs.readFileSync(files.file.filepath);
       } else if (fields.file) {
+        console.log('File in fields as string, type:', typeof fields.file);
+        console.log('File starts with:', fields.file.substring(0, 50));
         // File might be in fields as base64 string
         const base64Data = typeof fields.file === 'string' 
           ? fields.file.replace(/^data:image\/\w+;base64,/, '')
           : fields.file;
         imageBuffer = Buffer.from(base64Data, 'base64');
+        console.log('Buffer length:', imageBuffer.length);
       } else {
         return res.status(400).json({ error: 'File is required' });
       }
@@ -52,17 +60,29 @@ module.exports = async function handler(req, res) {
         body += chunk.toString();
       }
       fields = JSON.parse(body);
+      console.log('JSON fields:', Object.keys(fields));
 
       if (fields.file) {
+        console.log('File in JSON, type:', typeof fields.file);
+        console.log('File starts with:', fields.file.substring(0, 50));
         const base64Data = typeof fields.file === 'string'
           ? fields.file.replace(/^data:image\/\w+;base64,/, '')
           : fields.file;
         imageBuffer = Buffer.from(base64Data, 'base64');
+        console.log('Buffer length:', imageBuffer.length);
       } else {
         return res.status(400).json({ error: 'File is required' });
       }
     } else {
       return res.status(400).json({ error: 'Unsupported content type' });
+    }
+
+    console.log('Image buffer length:', imageBuffer.length);
+    console.log('Buffer first 10 bytes:', imageBuffer.slice(0, 10).toString('hex'));
+
+    // Validate image format
+    if (!imageBuffer || imageBuffer.length === 0) {
+      return res.status(400).json({ error: 'Empty image buffer' });
     }
 
     let image = sharp(imageBuffer);
