@@ -6,64 +6,60 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Configure formidable to handle files in memory (no disk I/O)
+  // Configure formidable for Vercel Serverless Functions
   const form = formidable({
     maxFileSize: 5 * 1024 * 1024, // 5MB
     maxTotalFileSize: 5 * 1024 * 1024,
-    fileWriteStreamHandler: () => {
-      // Custom handler to store files in memory
-      const chunks = [];
-      return {
-        write: (chunk) => chunks.push(chunk),
-        end: () => chunks,
-      };
-    },
+    keepExtensions: false,
+    multiples: false
   });
 
   try {
-    // Parse the incoming request
-    const [fields, files] = await form.parse(req);
+    // Parse incoming request with Promise wrapper
+    const [fields, files] = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve([fields, files]);
+      });
+    });
 
-    if (!files.file || files.file.length === 0) {
+    if (!files.file) {
       return res.status(400).json({ error: 'File is required' });
     }
 
-    const file = files.file[0];
-    const imageBuffer = Buffer.concat(file.buffer || file.filepath || []);
+    // Read file content
+    const fs = require('fs');
+    const imageBuffer = fs.readFileSync(files.file.filepath);
 
     let image = sharp(imageBuffer);
-
-    // Get metadata
-    const metadata = await image.metadata();
 
     // Обрезка (crop)
     if (fields.cropWidth && fields.cropHeight && fields.x && fields.y) {
       image = image.extract({
-        left: parseInt(fields.x[0]),
-        top: parseInt(fields.y[0]),
-        width: parseInt(fields.cropWidth[0]),
-        height: parseInt(fields.cropHeight[0])
+        left: parseInt(fields.cropWidth),
+        top: parseInt(fields.cropHeight),
+        width: parseInt(fields.x),
+        height: parseInt(fields.y)
       });
     }
 
     // Изменение размера (resize)
     if (fields.width && fields.height) {
-      image = image.resize(parseInt(fields.width[0]), parseInt(fields.height[0]));
+      image = image.resize(parseInt(fields.width), parseInt(fields.height));
     }
 
     // Поворот (rotate)
     if (fields.angle) {
-      image = image.rotate(parseInt(fields.angle[0]));
+      image = image.rotate(parseInt(fields.angle));
     }
 
     // Скругление углов (rounded corners)
-    if (fields.radius && fields.radius[0] > 0) {
-      const radius = parseInt(fields.radius[0]);
-      const imgMetadata = await image.metadata();
-      const width = imgMetadata.width;
-      const height = imgMetadata.height;
+    if (fields.radius && parseInt(fields.radius) > 0) {
+      const radius = parseInt(fields.radius);
+      const metadata = await image.metadata();
+      const width = metadata.width;
+      const height = metadata.height;
 
-      // Создаем маску для скругления
       const roundedCorners = Buffer.from(
         `<svg><rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
       );
@@ -79,7 +75,7 @@ module.exports = async function handler(req, res) {
     }
 
     // Конвертация в формат
-    const format = fields.format ? fields.format[0] : 'png';
+    const format = fields.format || 'png';
     let processedImage;
 
     if (format === 'png') {
