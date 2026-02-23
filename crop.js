@@ -8,8 +8,8 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Configure formidable to use memory storage
-    const form = new formidable.IncomingForm({
+    // Configure formidable
+    const form = formidable({
       maxFileSize: 5 * 1024 * 1024, // 5MB
       maxTotalFileSize: 5 * 1024 * 1024,
     });
