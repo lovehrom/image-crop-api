@@ -45,24 +45,36 @@ module.exports = async function handler(req, res) {
       imageBuffer = req.file.buffer;
     } else if (req.body.file) {
       // Case 2: File as string in req.body.file
-      debug.fileSource = 'req.body.file (string)';
-      if (typeof req.body.file === 'string') {
-        // Try to decode as binary
-        imageBuffer = Buffer.from(req.body.file, 'binary');
-        debug.decodingMethod = 'binary';
-        debug.bufferLength = imageBuffer.length;
+      const fileData = req.body.file;
+      debug.fileSource = 'req.body.file';
+      debug.fileDataType = typeof fileData;
+      debug.fileDataLength = fileData.length;
+      debug.fileDataStart = fileData.substring(0, 100);
+
+      // Try base64 first
+      if (typeof fileData === 'string' && fileData.match(/^[A-Za-z0-9+/]+=*$/)) {
+        debug.decodingMethod = 'base64';
+        imageBuffer = Buffer.from(fileData, 'base64');
       } else {
-        return res.status(400).json({ 
-          error: 'Invalid file format in body',
-          debug 
-        });
+        // Try latin1 (binary-like)
+        debug.decodingMethod = 'latin1';
+        imageBuffer = Buffer.from(fileData, 'latin1');
       }
+
+      debug.decodedBufferLength = imageBuffer.length;
     } else {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'File is required',
         debug
       });
     }
+
+    // Debug before Sharp
+    console.log('Buffer length:', imageBuffer.length);
+    console.log('Buffer first bytes:', imageBuffer.slice(0, 4).toString('hex'));
+
+    // PNG signature: 89 50 4e 47 0d 0a (.PNG.)
+    // JPEG signature: ff d8 ff e0
 
     let image = sharp(imageBuffer);
 
