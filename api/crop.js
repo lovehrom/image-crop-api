@@ -18,6 +18,13 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    // BEFORE Multer - log raw request
+    const beforeMulter = {
+      contentType: req.headers['content-type'],
+      method: req.method,
+      headers: req.headers
+    };
+
     // Parse request with Multer middleware
     await new Promise((resolve, reject) => {
       upload.single('file')(req, res, (err) => {
@@ -30,9 +37,30 @@ module.exports = async function handler(req, res) {
       });
     });
 
+    // AFTER Multer - log what was parsed
+    const afterMulter = {
+      reqFileExists: !!req.file,
+      reqFileObject: req.file ? {
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        encoding: req.file.encoding,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        bufferLength: req.file.buffer ? req.file.buffer.length : null
+      } : null,
+      reqBodyKeys: Object.keys(req.body || {}),
+      reqBodyValues: req.body || {}
+    };
+
     // Check if file was uploaded
     if (!req.file) {
-      return res.status(400).json({ error: 'File is required' });
+      return res.status(400).json({
+        error: 'File is required',
+        debug: {
+          beforeMulter,
+          afterMulter
+        }
+      });
     }
 
     // Get image buffer from memory
