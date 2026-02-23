@@ -1,15 +1,14 @@
-const express = require('express');
-const router = express.Router();
 const sharp = require('sharp');
 const multer = require('multer');
-const { body, validationResult } = require('express-validator');
 
-// ===== MULTER CONFIG =====
+// Configure Multer with memory storage and increased limits
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    fieldSize: 10 * 1024 * 1024 // 10MB field size limit
+    fileSize: 5 * 1024 * 1024, // 5MB для файла
+    fieldSize: 10 * 1024 * 1024, // 10MB для текстовых полей
+    fields: 20,
+    files: 1
   }
 });
 
@@ -17,62 +16,88 @@ const upload = multer({
  * POST /crop
  * Обработка изображений (обрезка, изменение размера, поворот, скругление углов)
  */
-router.post('/crop', upload.single('file'), [
-  body('cropWidth').optional().isInt({ min: 1 }),
-  body('cropHeight').optional().isInt({ min: 1 }),
-  body('x').optional().isInt({ min: 0 }),
-  body('y').optional().isInt({ min: 0 }),
-  body('width').optional().isInt({ min: 1 }),
-  body('height').optional().isInt({ min: 1 }),
-  body('angle').optional().isInt({ min: 0, max: 360 }),
-  body('radius').optional().isInt({ min: 0 }),
-  body('format').optional().isIn(['png', 'jpeg', 'webp'])
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+router.post('/crop', upload.single('file'), async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    if (!req.file) {
+    // Parse request with Multer middleware
+    await new Promise((resolve, reject) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) {
+          console.error('Multer error:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // Handle both scenarios
+    let imageBuffer;
+
+    // Scenario 1: Normal clients - file in req.file (binary)
+    if (req.file && req.file.buffer && req.file.buffer.length > 0) {
+      imageBuffer = req.file.buffer;
+    }
+    // Scenario 2: RapidAPI Playground - file in req.body.file (string)
+    else if (req.body.file && typeof req.body.file === 'string') {
+      imageBuffer = Buffer.from(req.body.file, 'latin1');
+    } else {
       return res.status(400).json({ error: 'File is required' });
     }
 
-    let image = sharp(req.file.buffer);
+    // Parse parameters
+    const cropWidth = parseInt(req.body.cropWidth);
+    const cropHeight = parseInt(req.body.cropHeight);
+    const x = parseInt(req.body.x);
+    const y = parseInt(req.body.y);
+    const width = parseInt(req.body.width);
+    const height = parseInt(req.body.height);
+    const angle = parseInt(req.body.angle);
+    const radius = parseInt(req.body.radius);
+    const format = req.body.format || 'png';
+
+    // Validate crop parameters
+    if (!cropWidth || !cropHeight) {
+      return res.status(400).json({ error: 'cropWidth and cropHeight are required' });
+    }
+
+    let image = sharp(imageBuffer);
 
     // Обрезка (crop)
-    if (req.body.cropWidth && req.body.cropHeight && req.body.x && req.body.y) {
+    if (cropWidth && cropHeight && x && y) {
       image = image.extract({
-        left: parseInt(req.body.x),
-        top: parseInt(req.body.y),
-        width: parseInt(req.body.cropWidth),
-        height: parseInt(req.body.cropHeight)
+        left: x,
+        top: y,
+        width: cropWidth,
+        height: cropHeight
       });
     }
 
     // Изменение размера (resize)
-    if (req.body.width && req.body.height) {
-      image = image.resize(parseInt(req.body.width), parseInt(req.body.height));
+    if (width && height) {
+      image = image.resize(width, height);
     }
 
     // Поворот (rotate)
-    if (req.body.angle) {
-      image = image.rotate(parseInt(req.body.angle));
+    if (angle) {
+      image = image.rotate(angle);
     }
 
     // Скругление углов (rounded corners)
-    if (req.body.radius && req.body.radius > 0) {
-      const radius = parseInt(req.body.radius);
-      const width = image.metadata.width;
-      const height = image.metadata.height;
+    if (radius && radius > 0) {
+      const metadata = await image.metadata();
+      const imgWidth = metadata.width;
+      const imgHeight = metadata.height;
 
-      // Создаем маску для скругления
       const roundedCorners = Buffer.from(
-        `<svg><rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
+        `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
       );
 
       const roundedCornersMask = await sharp(roundedCorners)
-        .resize(width, height)
+        .resize(imgWidth, imgHeight)
         .grayscale()
         .toBuffer();
 
@@ -82,7 +107,6 @@ router.post('/crop', upload.single('file'), [
     }
 
     // Конвертация в формат
-    const format = req.body.format || 'png';
     let processedImage;
 
     if (format === 'png') {
@@ -94,12 +118,15 @@ router.post('/crop', upload.single('file'), [
     }
 
     // Отправка результата
-    res.set('Content-Type', `image/${format}`);
+    res.setHeader('Content-Type', `image/${format}`);
     res.send(processedImage);
 
   } catch (error) {
     console.error('Image processing error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
   }
 });
 
