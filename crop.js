@@ -41,13 +41,27 @@ module.exports = async function handler(req, res) {
         console.log('File in files object, reading from disk:', files.file.filepath);
         imageBuffer = fs.readFileSync(files.file.filepath);
       } else if (fields.file) {
-        console.log('File in fields as string, type:', typeof fields.file);
-        console.log('File starts with:', fields.file.substring(0, 50));
-        // File might be in fields as base64 string
-        const base64Data = typeof fields.file === 'string' 
-          ? fields.file.replace(/^data:image\/\w+;base64,/, '')
-          : fields.file;
-        imageBuffer = Buffer.from(base64Data, 'base64');
+        console.log('File in fields, type:', typeof fields.file);
+        console.log('File is string?', typeof fields.file === 'string');
+        console.log('File has value?', fields.file !== undefined && fields.file !== null);
+        
+        // Check if file is a string (FormData might send it as base64)
+        if (typeof fields.file === 'string') {
+          console.log('File starts with:', fields.file.substring(0, Math.min(50, fields.file.length)));
+          const base64Data = fields.file.replace(/^data:image\/\w+;base64,/, '');
+          imageBuffer = Buffer.from(base64Data, 'base64');
+        } else if (Array.isArray(fields.file)) {
+          console.log('File is array, first element type:', typeof fields.file[0]);
+          if (typeof fields.file[0] === 'string') {
+            const base64Data = fields.file[0].replace(/^data:image\/\w+;base64,/, '');
+            imageBuffer = Buffer.from(base64Data, 'base64');
+          } else {
+            return res.status(400).json({ error: 'Invalid file format' });
+          }
+        } else {
+          console.log('File object:', JSON.stringify(fields.file, null, 2));
+          return res.status(400).json({ error: 'File is not a string or array' });
+        }
         console.log('Buffer length:', imageBuffer.length);
       } else {
         return res.status(400).json({ error: 'File is required' });
@@ -64,11 +78,13 @@ module.exports = async function handler(req, res) {
 
       if (fields.file) {
         console.log('File in JSON, type:', typeof fields.file);
-        console.log('File starts with:', fields.file.substring(0, 50));
-        const base64Data = typeof fields.file === 'string'
-          ? fields.file.replace(/^data:image\/\w+;base64,/, '')
-          : fields.file;
-        imageBuffer = Buffer.from(base64Data, 'base64');
+        
+        if (typeof fields.file === 'string') {
+          const base64Data = fields.file.replace(/^data:image\/\w+;base64,/, '');
+          imageBuffer = Buffer.from(base64Data, 'base64');
+        } else {
+          return res.status(400).json({ error: 'File must be a base64 string' });
+        }
         console.log('Buffer length:', imageBuffer.length);
       } else {
         return res.status(400).json({ error: 'File is required' });
@@ -78,7 +94,7 @@ module.exports = async function handler(req, res) {
     }
 
     console.log('Image buffer length:', imageBuffer.length);
-    console.log('Buffer first 10 bytes:', imageBuffer.slice(0, 10).toString('hex'));
+    console.log('Buffer first 20 bytes:', imageBuffer.slice(0, 20).toString('hex'));
 
     // Validate image format
     if (!imageBuffer || imageBuffer.length === 0) {
