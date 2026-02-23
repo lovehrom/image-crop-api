@@ -44,6 +44,19 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'File is required' });
     }
 
+    // ===== TEMPORARY DEBUG =====
+    const firstBytes = imageBuffer.slice(0, 8).toString('hex');
+    const bufLen = imageBuffer.length;
+    const source = req.file ? 'req.file' : 'req.body';
+
+    // Return debug temporarily
+    return res.json({
+      debug: 'TEMP',
+      firstBytes,
+      bufLen,
+      source
+    });
+
     // Parse parameters
     const cropWidth = parseInt(req.body.cropWidth);
     const cropHeight = parseInt(req.body.cropHeight);
