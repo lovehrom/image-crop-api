@@ -6,12 +6,22 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Configure formidable to handle files in memory (no disk I/O)
   const form = formidable({
     maxFileSize: 5 * 1024 * 1024, // 5MB
-    maxTotalFileSize: 5 * 1024 * 1024
+    maxTotalFileSize: 5 * 1024 * 1024,
+    fileWriteStreamHandler: () => {
+      // Custom handler to store files in memory
+      const chunks = [];
+      return {
+        write: (chunk) => chunks.push(chunk),
+        end: () => chunks,
+      };
+    },
   });
 
   try {
+    // Parse the incoming request
     const [fields, files] = await form.parse(req);
 
     if (!files.file || files.file.length === 0) {
@@ -19,7 +29,12 @@ module.exports = async function handler(req, res) {
     }
 
     const file = files.file[0];
-    let image = sharp(file.filepath);
+    const imageBuffer = Buffer.concat(file.buffer || file.filepath || []);
+
+    let image = sharp(imageBuffer);
+
+    // Get metadata
+    const metadata = await image.metadata();
 
     // Обрезка (crop)
     if (fields.cropWidth && fields.cropHeight && fields.x && fields.y) {
@@ -44,9 +59,9 @@ module.exports = async function handler(req, res) {
     // Скругление углов (rounded corners)
     if (fields.radius && fields.radius[0] > 0) {
       const radius = parseInt(fields.radius[0]);
-      const metadata = await image.metadata();
-      const width = metadata.width;
-      const height = metadata.height;
+      const imgMetadata = await image.metadata();
+      const width = imgMetadata.width;
+      const height = imgMetadata.height;
 
       // Создаем маску для скругления
       const roundedCorners = Buffer.from(
@@ -81,6 +96,9 @@ module.exports = async function handler(req, res) {
 
   } catch (error) {
     console.error('Image processing error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
   }
-}
+};
