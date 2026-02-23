@@ -18,13 +18,6 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // BEFORE Multer - log raw request
-    const beforeMulter = {
-      contentType: req.headers['content-type'],
-      method: req.method,
-      headers: req.headers
-    };
-
     // Parse request with Multer middleware
     await new Promise((resolve, reject) => {
       upload.single('file')(req, res, (err) => {
@@ -37,34 +30,39 @@ module.exports = async function handler(req, res) {
       });
     });
 
-    // AFTER Multer - log what was parsed
-    const afterMulter = {
+    // Handle both cases: file in req.file or in req.body.file
+    let imageBuffer;
+    const debug = {
       reqFileExists: !!req.file,
-      reqFileObject: req.file ? {
-        fieldname: req.file.fieldname,
-        originalname: req.file.originalname,
-        encoding: req.file.encoding,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        bufferLength: req.file.buffer ? req.file.buffer.length : null
-      } : null,
-      reqBodyKeys: Object.keys(req.body || {}),
-      reqBodyValues: req.body || {}
+      reqBodyFileExists: !!req.body?.file,
+      reqBodyFileType: req.body?.file ? typeof req.body.file : null,
+      reqBodyKeys: Object.keys(req.body || {})
     };
 
-    // Check if file was uploaded
-    if (!req.file) {
-      return res.status(400).json({
+    if (req.file) {
+      // Case 1: Binary file in req.file
+      debug.fileSource = 'req.file.buffer';
+      imageBuffer = req.file.buffer;
+    } else if (req.body.file) {
+      // Case 2: File as string in req.body.file
+      debug.fileSource = 'req.body.file (string)';
+      if (typeof req.body.file === 'string') {
+        // Try to decode as binary
+        imageBuffer = Buffer.from(req.body.file, 'binary');
+        debug.decodingMethod = 'binary';
+        debug.bufferLength = imageBuffer.length;
+      } else {
+        return res.status(400).json({ 
+          error: 'Invalid file format in body',
+          debug 
+        });
+      }
+    } else {
+      return res.status(400).json({ 
         error: 'File is required',
-        debug: {
-          beforeMulter,
-          afterMulter
-        }
+        debug
       });
     }
-
-    // Get image buffer from memory
-    const imageBuffer = req.file.buffer;
 
     let image = sharp(imageBuffer);
 
