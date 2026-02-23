@@ -1,38 +1,19 @@
 {
   "name": "image-crop-api",
   "version": "1.0.0",
-  "description": "Image Crop API with rotation and border radius support",
-  "main": "index.js",
+  "description": "API for cropping, resizing, rotating, and rounding corners of images",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js",
-    "test": "node index.js",
-    "test:api": "node tester.js"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
   },
   "dependencies": {
-    "axios": "^1.13.5",
-    "dotenv": "^16.3.1",
     "express": "^4.18.0",
-    "form-data": "^4.0.0",
-    "multer": "^1.4.5-lts.1",
-    "sharp": "^0.33.0"
+    "sharp": "^0.32.0",
+    "multer": "^1.4.5",
+    "express-validator": "^6.14.0"
   },
   "engines": {
-    "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lovehrom/image-crop-api"
-  },
-  "keywords": [
-    "image",
-    "crop",
-    "resize",
-    "rotate",
-    "api",
-    "express",
-    "sharp"
-  ],
-  "author": "lovehrom",
-  "license": "MIT"
+    "node": ">=14.x"
+  }
 }
