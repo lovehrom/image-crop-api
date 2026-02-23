@@ -1,4 +1,5 @@
 const sharp = require('sharp');
+const { formidable } = require('formidable');
 const fs = require('fs');
 
 module.exports = async function handler(req, res) {
@@ -7,56 +8,88 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Parse JSON body for RapidAPI (file as base64 string)
-    let body = '';
+    // Check content type
+    const contentType = req.headers['content-type'] || '';
 
-    for await (const chunk of req) {
-      body += chunk.toString();
-    }
-
-    const data = JSON.parse(body);
-
-    // Extract file from base64
     let imageBuffer;
+    let fields = {};
 
-    if (data.file) {
-      // If file is base64 string
-      if (typeof data.file === 'string') {
-        // Remove data URL prefix if present
-        const base64Data = data.file.replace(/^data:image\/\w+;base64,/, '');
+    if (contentType.includes('multipart/form-data')) {
+      // Parse multipart/form-data with formidable
+      const form = formidable({
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        maxTotalFileSize: 5 * 1024 * 1024,
+      });
+
+      [fields, files] = await new Promise((resolve, reject) => {
+        form.parse(req, (err, fields, files) => {
+          if (err) {
+            console.error('Form parse error:', err);
+            reject(err);
+          } else {
+            resolve([fields, files]);
+          }
+        });
+      });
+
+      // Check if file is in files object
+      if (files.file) {
+        imageBuffer = fs.readFileSync(files.file.filepath);
+      } else if (fields.file) {
+        // File might be in fields as base64 string
+        const base64Data = typeof fields.file === 'string' 
+          ? fields.file.replace(/^data:image\/\w+;base64,/, '')
+          : fields.file;
         imageBuffer = Buffer.from(base64Data, 'base64');
       } else {
-        return res.status(400).json({ error: 'Invalid file format' });
+        return res.status(400).json({ error: 'File is required' });
+      }
+
+    } else if (contentType.includes('application/json')) {
+      // Parse JSON body
+      let body = '';
+      for await (const chunk of req) {
+        body += chunk.toString();
+      }
+      fields = JSON.parse(body);
+
+      if (fields.file) {
+        const base64Data = typeof fields.file === 'string'
+          ? fields.file.replace(/^data:image\/\w+;base64,/, '')
+          : fields.file;
+        imageBuffer = Buffer.from(base64Data, 'base64');
+      } else {
+        return res.status(400).json({ error: 'File is required' });
       }
     } else {
-      return res.status(400).json({ error: 'File is required' });
+      return res.status(400).json({ error: 'Unsupported content type' });
     }
 
     let image = sharp(imageBuffer);
 
     // Обрезка (crop)
-    if (data.cropWidth && data.cropHeight && data.x && data.y) {
+    if (fields.cropWidth && fields.cropHeight && fields.x && fields.y) {
       image = image.extract({
-        left: parseInt(data.cropWidth),
-        top: parseInt(data.cropHeight),
-        width: parseInt(data.x),
-        height: parseInt(data.y)
+        left: parseInt(fields.cropWidth),
+        top: parseInt(fields.cropHeight),
+        width: parseInt(fields.x),
+        height: parseInt(fields.y)
       });
     }
 
     // Изменение размера (resize)
-    if (data.width && data.height) {
-      image = image.resize(parseInt(data.width), parseInt(data.height));
+    if (fields.width && fields.height) {
+      image = image.resize(parseInt(fields.width), parseInt(fields.height));
     }
 
     // Поворот (rotate)
-    if (data.angle) {
-      image = image.rotate(parseInt(data.angle));
+    if (fields.angle) {
+      image = image.rotate(parseInt(fields.angle));
     }
 
     // Скругление углов (rounded corners)
-    if (data.radius && parseInt(data.radius) > 0) {
-      const radius = parseInt(data.radius);
+    if (fields.radius && parseInt(fields.radius) > 0) {
+      const radius = parseInt(fields.radius);
       const metadata = await image.metadata();
       const width = metadata.width;
       const height = metadata.height;
@@ -76,7 +109,7 @@ module.exports = async function handler(req, res) {
     }
 
     // Конвертация в формат
-    const format = data.format || 'png';
+    const format = fields.format || 'png';
     let processedImage;
 
     if (format === 'png') {
