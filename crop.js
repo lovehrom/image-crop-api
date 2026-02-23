@@ -26,8 +26,22 @@ module.exports = async function handler(req, res) {
       });
     });
 
+    // Debug logging
+    console.log('Files:', JSON.stringify(Object.keys(files), null, 2));
+    console.log('Fields:', JSON.stringify(Object.keys(fields), null, 2));
+
     if (!files.file) {
-      return res.status(400).json({ error: 'File is required' });
+      return res.status(400).json({
+        error: 'File is required',
+        debug: {
+          filesKeys: Object.keys(files),
+          fieldsKeys: Object.keys(fields),
+          allFiles: Object.keys(files).map(k => ({
+            key: k,
+            value: files[k]
+          }))
+        }
+      });
     }
 
     // Get image buffer from disk
@@ -94,7 +108,14 @@ module.exports = async function handler(req, res) {
       res.send(processedImage);
 
     } else {
-      return res.status(500).json({ error: 'Failed to read file' });
+      return res.status(500).json({
+        error: 'Failed to read file',
+        debug: {
+          fileExists: files.file?.filepath ? fs.existsSync(files.file.filepath) : false,
+          filepath: files.file?.filepath,
+          fileObject: files.file
+        }
+      });
     }
 
   } catch (error) {
