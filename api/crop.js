@@ -92,23 +92,28 @@ module.exports = async function handler(req, res) {
 
     let image = sharp(imageBuffer);
 
-    // Step 1: Resize
+    // Step 1: Crop (first!)
+    image = image.extract({ left: x, top: y, width: cropWidth, height: cropHeight });
+
+    // Step 2: Resize
+    let finalWidth = cropWidth;
+    let finalHeight = cropHeight;
+
     if (width || height) {
-      image = image.resize(width || null, height || null);
+      finalWidth = width || cropWidth;
+      finalHeight = height || cropHeight;
+      image = image.resize(finalWidth, finalHeight);
     }
 
-    // Step 2: Rotate
+    // Step 3: Rotate
     if (angle !== 0) {
       image = image.rotate(angle);
     }
 
-    // Step 3: Crop
-    image = image.extract({ left: x, top: y, width: cropWidth, height: cropHeight });
-
     // Step 4: Border radius
     if (radius > 0) {
       const mask = Buffer.from(
-        `<svg><rect x="0" y="0" width="${cropWidth}" height="${cropHeight}" rx="${radius}" ry="${radius}"/></svg>`
+        `<svg><rect x="0" y="0" width="${finalWidth}" height="${finalHeight}" rx="${radius}" ry="${radius}"/></svg>`
       );
       image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
     }
