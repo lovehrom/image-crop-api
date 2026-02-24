@@ -41,19 +41,31 @@ module.exports = async function handler(req, res) {
     else if (req.body.file && typeof req.body.file === 'string') {
       const fileData = req.body.file;
 
-      // Debug: return parsed JSON structure to see what Playground sends
+      // Parse JSON with base64 data URL
       if (fileData.startsWith('{') || fileData.startsWith('[')) {
         try {
           const parsed = JSON.parse(fileData);
-          console.log('Parsed file structure:', JSON.stringify(parsed, null, 2));
-          return res.json({
-            debug: true,
-            structure: parsed,
-            message: 'Inspect the structure above'
-          });
+          const base64Data = parsed.data || parsed.base64 || parsed.content || Object.values(parsed)[0];
+
+          if (base64Data && typeof base64Data === 'string') {
+            // Handle data URL format: "data:image/png;base64,<base64>"
+            if (base64Data.startsWith('data:')) {
+              const base64Part = base64Data.split(',')[1];
+              if (!base64Part) {
+                return res.status(400).json({ error: 'Invalid data URL format' });
+              }
+              imageBuffer = Buffer.from(base64Part, 'base64');
+            }
+            // Handle pure base64 string
+            else {
+              imageBuffer = Buffer.from(base64Data, 'base64');
+            }
+          } else {
+            return res.status(400).json({ error: 'No base64 data found in JSON' });
+          }
         } catch(e) {
           console.log('JSON parse error:', e.message);
-          return res.json({ error: 'Failed to parse JSON', details: e.message });
+          return res.status(400).json({ error: 'Failed to parse JSON', details: e.message });
         }
       } else {
         imageBuffer = Buffer.from(fileData, 'latin1');
