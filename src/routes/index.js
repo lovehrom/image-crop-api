@@ -1,145 +1,112 @@
+const express = require('express');
+const router = express.Router();
 const sharp = require('sharp');
 const multer = require('multer');
 
-// Configure Multer with memory storage and increased limits
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB для файла
-    fieldSize: 10 * 1024 * 1024, // 10MB для текстовых полей
+    fileSize: 5 * 1024 * 1024,
+    fieldSize: 10 * 1024 * 1024,
     fields: 20,
     files: 1
   }
 });
 
-/**
- * POST /crop
- * Обработка изображений (обрезка, изменение размера, поворот, скругление углов)
- */
+router.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
+  });
+});
+
 router.post('/crop', upload.single('file'), async (req, res) => {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
-    // Parse request with Multer middleware
-    await new Promise((resolve, reject) => {
-      upload.single('file')(req, res, (err) => {
-        if (err) {
-          console.error('Multer error:', err);
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-
-    // Handle both scenarios
     let imageBuffer;
 
-    // Scenario 1: Normal clients - file in req.file (binary)
     if (req.file && req.file.buffer && req.file.buffer.length > 0) {
       imageBuffer = req.file.buffer;
-    }
-    // Scenario 2: RapidAPI Playground - file in req.body.file (string)
-    else if (req.body.file && typeof req.body.file === 'string') {
-      imageBuffer = Buffer.from(req.body.file, 'latin1');
+    } else if (req.body && req.body.file && req.body.file.length > 0) {
+      const fileData = req.body.file;
+
+      // Debug: return parsed JSON structure to see what Playground sends
+      if (fileData.startsWith('{') || fileData.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(fileData);
+          console.log('Parsed file structure:', JSON.stringify(parsed, null, 2));
+          return res.json({
+            debug: true,
+            structure: parsed,
+            message: 'Inspect the structure above'
+          });
+        } catch(e) {
+          console.log('JSON parse error:', e.message);
+          return res.json({ error: 'Failed to parse JSON', details: e.message });
+        }
+      } else {
+        imageBuffer = Buffer.from(fileData, 'latin1');
+      }
     } else {
       return res.status(400).json({ error: 'File is required' });
     }
 
-    // Parse parameters
-    const cropWidth = parseInt(req.body.cropWidth);
-    const cropHeight = parseInt(req.body.cropHeight);
-    const x = parseInt(req.body.x);
-    const y = parseInt(req.body.y);
-    const width = parseInt(req.body.width);
-    const height = parseInt(req.body.height);
-    const angle = parseInt(req.body.angle);
-    const radius = parseInt(req.body.radius);
-    const format = req.body.format || 'png';
+    const cropWidth  = parseInt(req.body.cropWidth)  || null;
+    const cropHeight = parseInt(req.body.cropHeight) || null;
+    const x          = parseInt(req.body.x)          || 0;
+    const y          = parseInt(req.body.y)          || 0;
+    const width      = parseInt(req.body.width)      || null;
+    const height     = parseInt(req.body.height)     || null;
+    const angle      = parseInt(req.body.angle)      || 0;
+    const radius     = parseInt(req.body.radius)     || 0;
+    const format     = (req.body.format || 'png').toLowerCase();
 
-    // Validate crop parameters
     if (!cropWidth || !cropHeight) {
       return res.status(400).json({ error: 'cropWidth and cropHeight are required' });
     }
 
     let image = sharp(imageBuffer);
 
-    // Обрезка (crop)
-    if (cropWidth && cropHeight && x && y) {
-      image = image.extract({
-        left: x,
-        top: y,
-        width: cropWidth,
-        height: cropHeight
-      });
+    // Step 1: Resize
+    if (width || height) {
+      image = image.resize(width || null, height || null);
     }
 
-    // Изменение размера (resize)
-    if (width && height) {
-      image = image.resize(width, height);
-    }
-
-    // Поворот (rotate)
-    if (angle) {
+    // Step 2: Rotate
+    if (angle !== 0) {
       image = image.rotate(angle);
     }
 
-    // Скругление углов (rounded corners)
-    if (radius && radius > 0) {
-      const metadata = await image.metadata();
-      const imgWidth = metadata.width;
-      const imgHeight = metadata.height;
+    // Step 3: Crop
+    image = image.extract({ left: x, top: y, width: cropWidth, height: cropHeight });
 
-      const roundedCorners = Buffer.from(
-        `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}" fill="black"/></svg>`
+    // Step 4: Border radius
+    if (radius > 0) {
+      const mask = Buffer.from(
+        `<svg><rect x="0" y="0" width="${cropWidth}" height="${cropHeight}" rx="${radius}" ry="${radius}"/></svg>`
       );
-
-      const roundedCornersMask = await sharp(roundedCorners)
-        .resize(imgWidth, imgHeight)
-        .grayscale()
-        .toBuffer();
-
-      image = image.composite([
-        { input: roundedCornersMask, blend: 'in' }
-      ]);
+      image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
     }
 
-    // Конвертация в формат
-    let processedImage;
-
-    if (format === 'png') {
-      processedImage = await image.png().toBuffer();
-    } else if (format === 'jpeg') {
-      processedImage = await image.jpeg({ quality: 80 }).toBuffer();
+    if (format === 'jpeg' || format === 'jpg') {
+      image = image.jpeg({ quality: 90 });
     } else if (format === 'webp') {
-      processedImage = await image.webp({ quality: 80 }).toBuffer();
+      image = image.webp({ quality: 90 });
+    } else {
+      image = image.png();
     }
 
-    // Отправка результата
-    res.setHeader('Content-Type', `image/${format}`);
-    res.send(processedImage);
+    const result = await image.toBuffer();
 
-  } catch (error) {
-    console.error('Image processing error:', error);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: error.message
-    });
+    const mimeMap = { png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp' };
+    res.set('Content-Type', mimeMap[format] || 'image/png');
+    res.set('Content-Disposition', `attachment; filename=cropped.${format}`);
+    res.send(result);
+
+  } catch (err) {
+    console.error('Crop error:', err.message);
+    res.status(500).json({ error: 'Internal server error', message: err.message });
   }
-});
-
-/**
- * GET /health
- * Проверка здоровья API
- */
-router.get('/health', async (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: Date.now(),
-    version: '1.0.0'
-  });
 });
 
 module.exports = router;
