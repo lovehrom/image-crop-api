@@ -92,57 +92,43 @@ module.exports = async function handler(req, res) {
 
     let image = sharp(imageBuffer);
 
-    // Apply transformations in order
-    if (cropWidth && cropHeight && x && y) {
-      image = image.extract({
-        left: x,
-        top: y,
-        width: cropWidth,
-        height: cropHeight
-      });
+    // Step 1: Resize
+    if (width || height) {
+      image = image.resize(width || null, height || null);
     }
 
-    // Изменение размера (resize)
-    if (width && height) {
-      image = image.resize(width, height);
-    }
-
-    // Get dimensions after crop/resize (before rotate)
-    const metadata = await image.metadata();
-    const imgWidth = metadata.width;
-    const imgHeight = metadata.height;
-
-    // Скругление углов (rounded corners) - BEFORE rotation
-    if (radius && radius > 0) {
-      // Create mask with same dimensions
-      const maskBuffer = Buffer.from(
-        `<svg width="${imgWidth}" height="${imgHeight}">
-          <rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/>
-        </svg>`
-      );
-      const mask = await sharp(maskBuffer).toBuffer();
-      image = image.composite([{ input: mask, blend: 'dest-in' }]);
-    }
-
-    // Поворот (rotate) - AFTER border radius
-    if (angle) {
+    // Step 2: Rotate
+    if (angle !== 0) {
       image = image.rotate(angle);
     }
 
-    // Конвертация в формат
-    let processedImage;
+    // Step 3: Crop
+    image = image.extract({ left: x, top: y, width: cropWidth, height: cropHeight });
 
-    if (format === 'png') {
-      processedImage = await image.png().toBuffer();
-    } else if (format === 'jpeg') {
-      processedImage = await image.jpeg({ quality: 80 }).toBuffer();
-    } else if (format === 'webp') {
-      processedImage = await image.webp({ quality: 80 }).toBuffer();
+    // Step 4: Border radius
+    if (radius > 0) {
+      const mask = Buffer.from(
+        `<svg><rect x="0" y="0" width="${cropWidth}" height="${cropHeight}" rx="${radius}" ry="${radius}"/></svg>`
+      );
+      image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
     }
 
+    // Конвертация в формат
+    if (format === 'jpeg' || format === 'jpg') {
+      image = image.jpeg({ quality: 90 });
+    } else if (format === 'webp') {
+      image = image.webp({ quality: 90 });
+    } else {
+      image = image.png();
+    }
+
+    const result = await image.toBuffer();
+
     // Отправка результата
-    res.setHeader('Content-Type', `image/${format}`);
-    res.send(processedImage);
+    const mimeMap = { png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp' };
+    res.setHeader('Content-Type', mimeMap[format] || 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename=cropped.${format}`);
+    res.send(result);
 
   } catch (error) {
     console.error('Image processing error:', error);
