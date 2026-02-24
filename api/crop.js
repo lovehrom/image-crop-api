@@ -92,15 +92,8 @@ module.exports = async function handler(req, res) {
 
     let image = sharp(imageBuffer);
 
-    // Get original dimensions
-    const metadata = await image.metadata();
-    let imgWidth = metadata.width;
-    let imgHeight = metadata.height;
-
-    // Apply transformations
+    // Apply transformations in order
     if (cropWidth && cropHeight && x && y) {
-      imgWidth = cropWidth;
-      imgHeight = cropHeight;
       image = image.extract({
         left: x,
         top: y,
@@ -111,17 +104,15 @@ module.exports = async function handler(req, res) {
 
     // Изменение размера (resize)
     if (width && height) {
-      imgWidth = width;
-      imgHeight = height;
       image = image.resize(width, height);
     }
 
-    // Поворот (rotate)
-    if (angle) {
-      image = image.rotate(angle);
-    }
+    // Get dimensions after crop/resize (before rotate)
+    const metadata = await image.metadata();
+    const imgWidth = metadata.width;
+    const imgHeight = metadata.height;
 
-    // Скругление углов (rounded corners)
+    // Скругление углов (rounded corners) - BEFORE rotation
     if (radius && radius > 0) {
       // Create mask with same dimensions
       const maskBuffer = Buffer.from(
@@ -131,6 +122,11 @@ module.exports = async function handler(req, res) {
       );
       const mask = await sharp(maskBuffer).toBuffer();
       image = image.composite([{ input: mask, blend: 'dest-in' }]);
+    }
+
+    // Поворот (rotate) - AFTER border radius
+    if (angle) {
+      image = image.rotate(angle);
     }
 
     // Конвертация в формат
