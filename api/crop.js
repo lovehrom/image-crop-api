@@ -92,8 +92,15 @@ module.exports = async function handler(req, res) {
 
     let image = sharp(imageBuffer);
 
-    // Обрезка (crop)
+    // Get original dimensions
+    const metadata = await image.metadata();
+    let imgWidth = metadata.width;
+    let imgHeight = metadata.height;
+
+    // Apply transformations
     if (cropWidth && cropHeight && x && y) {
+      imgWidth = cropWidth;
+      imgHeight = cropHeight;
       image = image.extract({
         left: x,
         top: y,
@@ -104,6 +111,8 @@ module.exports = async function handler(req, res) {
 
     // Изменение размера (resize)
     if (width && height) {
+      imgWidth = width;
+      imgHeight = height;
       image = image.resize(width, height);
     }
 
@@ -114,11 +123,6 @@ module.exports = async function handler(req, res) {
 
     // Скругление углов (rounded corners)
     if (radius && radius > 0) {
-      // Get actual dimensions after all transformations
-      const metadata = await image.metadata();
-      const imgWidth = metadata.width;
-      const imgHeight = metadata.height;
-
       const mask = Buffer.from(
         `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/></svg>`
       );
