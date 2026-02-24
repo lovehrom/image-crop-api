@@ -121,13 +121,13 @@ module.exports = async function handler(req, res) {
       image = image.rotate(angle);
     }
 
-    // Скругление углов (rounded corners)
-    if (radius && radius > 0) {
-      const mask = Buffer.from(
-        `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/></svg>`
-      );
-      image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
-    }
+    // Скругление углов (rounded corners) - TEMPORARILY DISABLED FOR DEBUGGING
+    // if (radius && radius > 0) {
+    //   const mask = Buffer.from(
+    //     `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/></svg>`
+    //   );
+    //   image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
+    // }
 
     // Конвертация в формат
     let processedImage;
