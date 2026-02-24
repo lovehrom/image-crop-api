@@ -74,16 +74,16 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'File is required' });
     }
 
-    // Parse parameters
-    const cropWidth = parseInt(req.body.cropWidth);
-    const cropHeight = parseInt(req.body.cropHeight);
-    const x = parseInt(req.body.x);
-    const y = parseInt(req.body.y);
-    const width = parseInt(req.body.width);
-    const height = parseInt(req.body.height);
-    const angle = parseInt(req.body.angle);
-    const radius = parseInt(req.body.radius);
-    const format = req.body.format || 'png';
+    // Parse parameters with defaults
+    const cropWidth = parseInt(req.body.cropWidth) || 0;
+    const cropHeight = parseInt(req.body.cropHeight) || 0;
+    const x = parseInt(req.body.x) || 0;
+    const y = parseInt(req.body.y) || 0;
+    const width = parseInt(req.body.width) || null;
+    const height = parseInt(req.body.height) || null;
+    const angle = parseInt(req.body.angle) || 0;
+    const radius = parseInt(req.body.radius) || 0;
+    const format = (req.body.format || 'png').toLowerCase();
 
     // Validate crop parameters
     if (!cropWidth || !cropHeight) {
