@@ -37,25 +37,30 @@ module.exports = async function handler(req, res) {
     if (req.file && req.file.buffer && req.file.buffer.length > 0) {
       imageBuffer = req.file.buffer;
     }
-    // Scenario 2: RapidAPI Playground - file in req.body.file (string)
+    // Scenario 2: RapidAPI Playground - file in req.body.file (JSON string with base64)
     else if (req.body.file && typeof req.body.file === 'string') {
-      imageBuffer = Buffer.from(req.body.file, 'latin1');
+      const fileData = req.body.file;
+
+      // Debug: return parsed JSON structure to see what Playground sends
+      if (fileData.startsWith('{') || fileData.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(fileData);
+          console.log('Parsed file structure:', JSON.stringify(parsed, null, 2));
+          return res.json({
+            debug: true,
+            structure: parsed,
+            message: 'Inspect the structure above'
+          });
+        } catch(e) {
+          console.log('JSON parse error:', e.message);
+          return res.json({ error: 'Failed to parse JSON', details: e.message });
+        }
+      } else {
+        imageBuffer = Buffer.from(fileData, 'latin1');
+      }
     } else {
       return res.status(400).json({ error: 'File is required' });
     }
-
-    // ===== TEMPORARY DEBUG =====
-    const firstBytes = imageBuffer.slice(0, 8).toString('hex');
-    const bufLen = imageBuffer.length;
-    const source = req.file ? 'req.file' : 'req.body';
-
-    // Return debug temporarily
-    return res.json({
-      debug: 'TEMP',
-      firstBytes,
-      bufLen,
-      source
-    });
 
     // Parse parameters
     const cropWidth = parseInt(req.body.cropWidth);
