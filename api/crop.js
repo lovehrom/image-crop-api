@@ -123,11 +123,14 @@ module.exports = async function handler(req, res) {
 
     // Скругление углов (rounded corners)
     if (radius && radius > 0) {
-      const svgMask = `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/></svg>`;
-      const mask = await sharp(Buffer.from(svgMask))
-        .resize(imgWidth, imgHeight)
-        .toBuffer();
-      image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
+      // Create mask with same dimensions
+      const maskBuffer = Buffer.from(
+        `<svg width="${imgWidth}" height="${imgHeight}">
+          <rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/>
+        </svg>`
+      );
+      const mask = await sharp(maskBuffer).toBuffer();
+      image = image.composite([{ input: mask, blend: 'dest-in' }]);
     }
 
     // Конвертация в формат
