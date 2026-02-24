@@ -114,12 +114,13 @@ module.exports = async function handler(req, res) {
 
     // Скругление углов (rounded corners)
     if (radius && radius > 0) {
-      // Use final dimensions after crop/resize
-      const finalWidth = width || cropWidth;
-      const finalHeight = height || cropHeight;
+      // Get actual dimensions after all transformations
+      const metadata = await image.metadata();
+      const imgWidth = metadata.width;
+      const imgHeight = metadata.height;
 
       const mask = Buffer.from(
-        `<svg><rect x="0" y="0" width="${finalWidth}" height="${finalHeight}" rx="${radius}" ry="${radius}"/></svg>`
+        `<svg><rect x="0" y="0" width="${imgWidth}" height="${imgHeight}" rx="${radius}" ry="${radius}"/></svg>`
       );
       image = image.composite([{ input: mask, blend: 'dest-in' }]).png();
     }
