@@ -8,6 +8,15 @@
 
 REST API for cropping, resizing, rotating and processing images. Powered by **Sharp**, deployed on **Vercel**.
 
+## Key Implementation Details
+
+- **MVC architecture with middleware pipeline** — Clean separation of concerns with dedicated middleware layers for authentication, validation, and error handling. Each request flows through a predictable chain.
+- **Smart crop** — Auto-detection of aspect ratios with support for non-standard proportions. Intelligent centering and boundary checking to prevent out-of-bounds crops.
+- **File validation middleware** — Multi-layer validation checking file type, size limits (5 MB), and MIME-type verification before processing.
+- **Health check endpoint** — `/api/health` for monitoring service uptime, version tracking, and integration with Uptime services.
+- **Vercel serverless deployment** — Optimized for serverless with response size limits, efficient temp file handling, and cold-start mitigation.
+- **RapidAPI integration** — Custom gateway routing for seamless integration with the RapidAPI marketplace and custom domain mapping.
+
 ## Endpoints
 
 ### `POST /api/crop`
