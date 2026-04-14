@@ -1,197 +1,75 @@
 # Image Crop API
 
-Professional image cropping API with rotation and border radius support. Designed for e-commerce, mobile applications, and social networks.
+![Node.js](https://img.shields.io/badge/Node.js-14%2B-339933?logo=node.js)
+![Express](https://img.shields.io/badge/Express-4.18-000000?logo=express)
+![Sharp](https://img.shields.io/badge/Sharp-0.32-blue)
+![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## Features
-
-- **Crop** — Crop images by size or coordinates
-- **Resize** — Resize images to specific dimensions
-- **Rotate** — Rotate images (90°, 180°, 270°, custom angle)
-- **Border Radius** — Rounded corners (radius 10-50px)
-- **Health Check** — API status check
-
-## Tech Stack
-
-- **Runtime:** Node.js ^18.0.0
-- **Framework:** Express.js
-- **Image Processing:** Sharp ^0.33.0
-- **Deployment:** Vercel Serverless
+REST API for cropping, resizing, rotating and processing images. Powered by **Sharp**, deployed on **Vercel**.
 
 ## Endpoints
 
-### POST /crop
+### `POST /api/crop`
 
-Process image with crop, resize, rotate, and border radius operations.
+Crop, resize, rotate and apply border radius to an image.
 
-**Request:**
+**Form-Data fields:**
 
-Content-Type: `multipart/form-data`
-
-Parameters:
 | Parameter | Type | Required | Description |
-|-----------|------|-----------|-------------|
-| file | file | ✅ Yes | Image file (PNG/JPG, max 5MB) |
-| width | number | ❌ No | New width (1-10000px) |
-| height | number | ❌ No | New height (1-10000px) |
-| x | number | ❌ No | X coordinate (default: 0) |
-| y | number | ❌ No | Y coordinate (default: 0) |
-| cropWidth | number | ❌ No | Crop area width (>= 1px) |
-| cropHeight | number | ❌ No | Crop area height (>= 1px) |
-| angle | number | ❌ No | Rotation angle (0-360, or 90, 180, 270) |
-| radius | number | ❌ No | Border radius (10-50px) |
-| format | string | ❌ No | Output format (png, jpeg, webp, default: png) |
+|---|---|---|---|
+| `file` | File | Yes | Image file (PNG, JPG, WebP, up to 5 MB) |
+| `cropWidth` | Int | Yes | Width of crop region |
+| `cropHeight` | Int | Yes | Height of crop region |
+| `x` | Int | No | X offset for crop (default: 0) |
+| `y` | Int | No | Y offset for crop (default: 0) |
+| `width` | Int | No | Resize width before crop |
+| `height` | Int | No | Resize height before crop |
+| `angle` | Int | No | Rotation angle in degrees (default: 0) |
+| `radius` | Int | No | Border radius in px (default: 0) |
+| `format` | String | No | Output format: `png`, `jpeg`, `webp` (default: `png`) |
 
-**Example (curl):**
+**Example (cURL):**
 
 ```bash
-# Basic crop
-curl -X POST "http://localhost:3000/crop" \
-  -F "file=@image.png" \
-  -F "width=800" \
-  -F "height=600"
-
-# Crop with coordinates
-curl -X POST "http://localhost:3000/crop" \
-  -F "file=@image.png" \
+curl -X POST https://image-crop-api-ten.vercel.app/api/crop \
+  -F "file=@photo.jpg" \
+  -F "cropWidth=500" \
+  -F "cropHeight=500" \
   -F "x=100" \
-  -F "y=100" \
-  -F "cropWidth=400" \
-  -F "cropHeight=400"
-
-# Rotate
-curl -X POST "http://localhost:3000/crop" \
-  -F "file=@image.png" \
-  -F "angle=90"
-
-# Rotate with border radius
-curl -X POST "http://localhost:3000/crop" \
-  -F "file=@image.png" \
-  -F "angle=90" \
-  -F "radius=20"
+  -F "y=50" \
+  -F "angle=0" \
+  -F "format=png" \
+  -o cropped.png
 ```
 
-**Response:**
+### `GET /api/health`
 
-Status: 200 OK
-Content-Type: image/png | image/jpeg | image/webp
-Body: Binary image data
-
-**Error Response:**
+Health check endpoint.
 
 ```json
-{
-  "error": "Invalid width. Must be between 1 and 10000px"
-}
+{ "status": "healthy", "version": "1.0.0", "timestamp": "..." }
 ```
 
-### GET /health
+## Tech Stack
 
-Check API health status.
+- **Runtime:** Node.js 14+
+- **Framework:** Express
+- **Image Processing:** Sharp
+- **File Upload:** Multer
+- **Validation:** express-validator
+- **Hosting:** Vercel
 
-**Request:**
+## Quick Start
 
 ```bash
-curl "http://localhost:3000/health"
-```
-
-**Response:**
-
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "timestamp": "2024-01-01T00:00:00Z"
-}
-```
-
----
-
-## Error Codes
-
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 400 | Bad Request - Invalid parameters |
-| 413 | Payload Too Large - File exceeds 5MB |
-| 500 | Internal Server Error |
-
-## Getting Started
-
-### Installation
-
-```bash
-# Install dependencies
+git clone https://github.com/lovehrom/image-crop-api.git
+cd image-crop-api
 npm install
-
-# Start server
+cp .env.example .env
 npm start
-
-# Development mode
-npm run dev
-```
-
-### Autonomous Testing
-
-The project includes an autonomous testing script that runs all tests automatically without manual intervention.
-
-**To run all tests:**
-```bash
-npm run test:api
-```
-
-This will:
-- Test all 16 API endpoints
-- Validate all parameters
-- Check error handling
-- Generate TEST_REPORT_AUTONOMOUS.md
-
-**Or run tests manually:**
-See `INSTRUCTIONS_TESTING.md` for detailed testing instructions.
-
-### Environment Variables
-
-Create `.env` file based on `.env.example`:
-
-```env
-PORT=3000
-NODE_ENV=production
-```
-
-## Testing
-
-### Test Images
-
-For testing, you need a PNG or JPG image file. Copy any image file to the project folder as `test_image.png`.
-
-### Test Results
-
-After running `npm run test:api`, a `TEST_REPORT_AUTONOMOUS.md` file will be generated with:
-
-- All 16 test results (passed/failed)
-- Error details if any
-- Success rate percentage
-- Performance notes
-
-### Manual Testing
-
-See `INSTRUCTIONS_TESTING.md` for detailed manual testing instructions with curl examples.
-
-## Deployment
-
-### Vercel
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel deploy
 ```
 
 ## License
 
 MIT
-
-## Support
-
-For issues and questions, please contact: support@example.com
