@@ -69,6 +69,24 @@ Health check endpoint.
 - **Validation:** express-validator
 - **Hosting:** Vercel
 
+
+## Key Implementation Details
+
+### MVC Architecture with Middleware Pipeline
+- Request flows through middleware chain: auth → validation → processing → response
+- File validation middleware: checks MIME type, file size limits, supported formats
+- Error handling middleware: structured JSON error responses
+
+### Smart Crop Features
+- Aspect ratio presets (1:1, 16:9, 4:3, etc.) and custom ratios
+- Auto-detection of crop regions
+- Multiple output formats with quality control
+
+### Serverless Deployment on Vercel
+- Optimized for Vercel serverless functions (cold start, memory limits)
+- Temporary file handling with automatic cleanup
+- RapidAPI gateway integration for API marketplace distribution
+
 ## Quick Start
 
 ```bash
